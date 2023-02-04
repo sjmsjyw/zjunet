@@ -45,9 +45,9 @@ tok = os.getenv('GITHUB_TOKEN')
 usn = os.getenv('GITHUB_USERNAME')
 psw = os.getenv('GITHUB_PASSWORD')
 if tok is not None:
-    GITHUB_AUTH = 'token {}'.format(tok)
+    GITHUB_AUTH = f'token {tok}'
 elif usn is not None and psw is not None:
-    GITHUB_AUTH = 'Basic {}'.format(base64.b64encode('{}:{}'.format(usn, psw).encode('utf-8')).decode('utf-8'))
+    GITHUB_AUTH = f"Basic {base64.b64encode(f'{usn}:{psw}'.encode('utf-8')).decode('utf-8')}"
 
 def get(url):
     headers = {
@@ -57,31 +57,33 @@ def get(url):
     if GITHUB_AUTH is not None:
         headers['Authorization'] = GITHUB_AUTH
     r = makereq(url, headers=headers)
-    assert r.status // 100 == 2, 'HTTP Status {} != 2xx while requesting {}'.format(r.status, url)
+    assert (
+        r.status // 100 == 2
+    ), f'HTTP Status {r.status} != 2xx while requesting {url}'
     if r.status != 200:
-        print('WARNING: HTTP {} while requesting {}'.format(r.status, url))
+        print(f'WARNING: HTTP {r.status} while requesting {url}')
     return r.data
 
 def api_get(url):
-    return json.loads(get('https://api.github.com/' + url))
+    return json.loads(get(f'https://api.github.com/{url}'))
 
 author_cache = {}
 def get_author(name):
     if name in author_cache:
         return author_cache[name]
-    print('Reading data for {}'.format(name), end=' : ', file=sys.stderr)
-    data = api_get('users/{}'.format(name))
+    print(f'Reading data for {name}', end=' : ', file=sys.stderr)
+    data = api_get(f'users/{name}')
     data = {
         'name': data['name'],
         'email': data['email'],
     }
     author_cache[name] = data
-    print('{} <{}>'.format(data['name'], data['email']), file=sys.stderr)
+    print(f"{data['name']} <{data['email']}>", file=sys.stderr)
     return data
 
 def get_changelog(owner, name):
     print('Reading releases of {1} in {0}'.format(owner, name), file=sys.stderr)
-    releases = api_get('repos/{}/{}/releases'.format(owner, name))
+    releases = api_get(f'repos/{owner}/{name}/releases')
     releases = filter(lambda v: not v['draft'] and not v['prerelease'], releases)
 
     data = []
@@ -96,11 +98,7 @@ def get_changelog(owner, name):
         }
         tbody = rel['body'].strip()
         if tbody != '':
-            if tbody[0] != '-' and '\n' not in tbody:
-                item['changes'] = '- ' + tbody
-            else:
-                item['changes'] = tbody
-
+            item['changes'] = tbody if tbody[0] == '-' or '\n' in tbody else f'- {tbody}'
         data.append(item)
     return ChangeLog(data)
 
@@ -110,7 +108,7 @@ class ChangeLog:
     def rpm(self):
         rel = '%changelog\n'
         for item in self.raw:
-            rel += '* {} {} <{}> - {}\n'.format(item['time'].strftime('%a %b %d %Y'), item['author']['name'], item['author']['email'], '.'.join(item['version']))
+            rel += f"* {item['time'].strftime('%a %b %d %Y')} {item['author']['name']} <{item['author']['email']}> - {'.'.join(item['version'])}\n"
             if item['changes'] is not None:
                 rel += item['changes'] + '\n'
         return rel
@@ -118,7 +116,9 @@ class ChangeLog:
 available_formats = list(filter(lambda v: v[0] != '_', dir(ChangeLog)))
 
 if len(sys.argv) != 2:
-    print('Usage: {} <format>\nAvailable formats: {}'.format(sys.argv[0], ','.join(available_formats)))
+    print(
+        f"Usage: {sys.argv[0]} <format>\nAvailable formats: {','.join(available_formats)}"
+    )
 else:
     changelog = get_changelog('QSCTech', 'zjunet')
     if hasattr(changelog, sys.argv[1]):
